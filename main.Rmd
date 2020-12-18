@@ -1,0 +1,362 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+Loading libraries
+```{r}
+library(ggplot2)
+library(randomForest)
+library(doSNOW)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(aod)
+```
+
+Reading files
+```{r}
+train <- read.csv("train.csv")
+test <- read.csv("test.csv")
+class(train)
+```
+
+Let's look at fatures
+
+We'll Start with Response
+```{r}
+train$Response <- as.factor(train$Response)
+table(train$Response)
+```
+
+1. id -> remove
+
+2.Gender
+```{r}
+
+
+#train.mod$Gender <- as.factor(train$Gender)
+summary(train$Gender)
+```
+```{r}
+ggplot(train, aes(Gender, fill = Response)) +
+  geom_bar() +
+  ggtitle("Respose by Gender") +
+  xlab("Gender") +
+  ylab("Response count")
+```
+We'll keep track of featue engineered dat frame in train.mod
+```{r}
+train.mod <- as.data.frame(train[,"Gender"])
+names(train.mod)[1] <- "Gender"
+```
+3. Age
+```{r}
+summary(train$Age)
+ggplot(train, aes(Age, fill = Response)) +
+  geom_histogram() +
+  ggtitle("Response by Age groups") +
+  xlab("Age") +
+  ylab("Response coubt")
+```
+
+```{r}
+train.mod$Age <- as.numeric(train$Age)
+```
+4. Driving License
+```{r}
+ggplot(train, aes(Driving_License, fill = Response)) +
+  geom_bar() +
+  ggtitle("Respose by Driving License") +
+  xlab("Driving License") +
+  ylab("Response count")
+```
+
+```{r}
+table(train$Driving_License, train$Response)
+train.mod$Driving_License <- train$Driving_License
+```
+
+5. Region Codes
+```{r}
+length(unique(train$Region_Code))
+summary(as.factor(train$Region_Code))
+```
+Region codes are important but, we can't use it as factors because
+it has too many levels and using them as 'integers' loses their
+quality.
+So, we will make three columns for Region codes
+One for 0 to 19
+ne for 20 to 39
+One for 40 to 52
+
+```{r}
+train$Region_Code <- as.integer(train$Region_Code)
+Region_Code_1 <- as.integer(train$Region_Code)
+Region_Code_2 <- as.integer(train$Region_Code)
+Region_Code_3 <- as.integer(train$Region_Code)
+for (i in 1:nrow(train)) {
+  if(train$Region_Code[i]>=0 && train$Region_Code[i] <= 19) {
+    Region_Code_2[i]<- -1
+    Region_Code_3[i]<- -1
+  }
+  if(train$Region_Code[i] >= 20 && train$Region_Code[i] <= 39) {
+    Region_Code_1[i]<- -1
+    Region_Code_3[i]<- -1
+  }
+  if(train$Region_Code[i] >= 40 && train$Region_Code[i] <= 52) {
+    Region_Code_1[i]<- -1
+    Region_Code_2[i]<- -1
+  }
+}
+```
+
+```{r}
+train.mod <- cbind(train.mod, Region_Code_1, Region_Code_2, Region_Code_3)
+```
+
+
+5. Previosly insured
+```{r}
+str(as.factor(train$Previously_Insured))
+train.mod$Previously_Insured <- as.factor(train$Previously_Insured)
+```
+```{r}
+ggplot(train, aes(Previously_Insured, fill = Response)) +
+  geom_bar() +
+  ggtitle("Respose vs Previosly insured") +
+  xlab("Previos insured or not") +
+  ylab("Respose count")
+```
+
+7. Vehicle Age
+
+```{r}
+str(as.factor(train$Vehicle_Age))
+unique((train$Vehicle_Age))
+```
+```{r}
+train.mod$Vehicle_Age <- as.factor(train$Vehicle_Age)
+```
+```{r}
+ggplot(train, aes(as.factor(Vehicle_Age), fill = Response)) +
+  geom_bar() +
+  ggtitle("Respose count by Vehicle age") +
+  xlab("Vehicle Age") +
+  ylab("Response count")
+```
+
+
+8. Vehicle damage
+```{r}
+str(as.factor(train$Vehicle_Damage))
+```
+```{r}
+ggplot(train, aes(Vehicle_Damage, fill = Response)) +
+  geom_bar() +
+  ggtitle("Respose by Vehicle_Damage") +
+  xlab("Vehicle_Damage") +
+  ylab("Response count")
+```
+
+```{r}
+train.mod$Vehicle_Damage <- as.factor(train$Vehicle_Damage)
+```
+
+
+9. Annual Premium
+```{r}
+summary((train$Annual_Premium))
+```
+```{r}
+ggplot(train, aes(x = Annual_Premium, fill = Response)) +
+  geom_histogram(binwidth = 10000) +
+  ggtitle("Response by Annual Premium of insurance") +
+  xlab("Annual Premium") +
+  ylab("Response count")
+```
+
+// Will think about it
+
+10. Policy sales channel
+```{r}
+#policy.summary <-(summary(as.factor(train$Policy_Sales_Channel)))
+(str(as.factor(train$Policy_Sales_Channel)))
+```
+
+```{r}
+Policy_Sales_Channel.unique <- unique(train$Policy_Sales_Channel)
+channelCap <- 550
+a <- 2
+Policy_Sales_Channel.unique.mod <- as.numeric()
+for (i in 1:length(Policy_Sales_Channel.unique)) {
+  ifelse(length(which(train$Policy_Sales_Channel == Policy_Sales_Channel.unique[i])) <=channelCap,
+         Policy_Sales_Channel.unique.mod <- c(Policy_Sales_Channel.unique.mod, Policy_Sales_Channel.unique[i]),
+         a <- 3)
+}
+length(Policy_Sales_Channel.unique.mod)
+```
+
+Policy_Sales_Channel.unique.mod have too less values, we'll make them zero
+
+```{r}
+Policy_Sales_Channel.mod <- train$Policy_Sales_Channel
+for (i in 1:nrow(train)) {
+  if(Policy_Sales_Channel.mod[i] %in% Policy_Sales_Channel.unique.mod) {
+    Policy_Sales_Channel.mod[i] = -1
+  }
+}
+length(unique(Policy_Sales_Channel.mod))
+```
+
+Perfect!
+Now add this to train.mod
+```{r}
+train.mod$Policy_Sales_Channel <- Policy_Sales_Channel.mod
+```
+
+
+
+11. Vintage
+```{r}
+summary((train$Vintage))
+```
+Add to train mod
+```{r}
+train.mod$Vintage <- train$Vintage
+```
+
+
+
+
+
+
+
+Try random forest
+
+```{r}
+
+start.time = Sys.time()
+total.time <- Sys.time()
+
+cluster1 <- makeCluster(3, type = "SOCK")
+registerDoSNOW(cluster1)
+
+
+set.seed(1234)
+rf.1 <- randomForest(x = train.mod, y = as.factor(train$Response), importance = TRUE, ntree = 400)
+rf.1
+varImpPlot(rf.1)
+
+
+stopCluster(cluster1)
+
+total.time <- Sys.time() - start.time
+total.time
+
+
+
+```
+
+
+
+```{r}
+train.mod.1 <- as.data.frame(subset(train, select = c(Previously_Insured)))
+str(train.mod.1)
+```
+
+
+
+
+```{r}
+
+start.time = Sys.time()
+total.time <- Sys.time()
+
+cluster1 <- makeCluster(3, type = "SOCK")
+registerDoSNOW(cluster1)
+
+
+set.seed(1234)
+rf.1 <- randomForest(x = train.mod.1, y = as.factor(train$Response), importance = TRUE, ntree = 50)
+rf.1
+varImpPlot(rf.1)
+
+
+stopCluster(cluster1)
+
+total.time <- Sys.time() - start.time
+total.time
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+cv.folds.10 <- createMultiFolds(train$Response, k=10, times = 10)
+
+cntrlFunction <- trainControl(method = "repeatedcv", number = 3,
+                             repeats = 3, index = cv.folds.10)
+
+start.time = Sys.time()
+total.time <- Sys.time()
+
+cluster1 <- makeCluster(3, type = "SOCK")
+registerDoSNOW(cluster1)
+
+
+set.seed(1234)
+
+
+rpart.cv <- train(x = train.mod, y = train$Response, method = "rpart",
+                  tunelength=10, trControl=cntrlFunction)
+
+
+rpart.cv
+stopCluster(cluster1)
+
+total.time <- Sys.time() - start.time
+total.time
+
+```
+
+
+
+```{r}
+rpart.model <- rpart(train$Response ~ train.mod)
+rpart.model
+```
+
+
+```{r}
+train.mod$Response <- as.factor(train$Response)
+```
+```{r}
+logRegModel <- glm(Response ~ . , data = train.mod , family = "binomial")
+summary(logRegModel)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
